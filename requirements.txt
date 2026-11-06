@@ -1,0 +1,7 @@
+aiogram>=3.20,<4
+Telethon>=1.40,<2
+aiohttp>=3.9
+python-socks[asyncio]>=2.4
+qrcode>=7.4
+pillow>=10
+imageio-ffmpeg>=0.5

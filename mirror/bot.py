@@ -1,3 +1,4 @@
+import asyncio
 import html
 import logging
 import shutil
@@ -261,6 +262,7 @@ async def cmd_start(msg: Message):
              "/stop перестать писать выбранному",
              "/read отметить прочитанным выбранный чат",
              "/online «в сети» постоянно: вкл/выкл",
+             "/saved выгрузить сюда все кружки из «Избранного»",
              "/net бот перестаёт трогать «в сети» (статус как у обычного аккаунта): вкл/выкл",
              "/login вход по QR · /phone вход по номеру",
              "/logout отключить аккаунт",
@@ -417,6 +419,55 @@ async def cmd_online(msg: Message):
     await a.set_online(a.always_online)
     await answer(msg, "Аккаунт теперь постоянно «в сети»." if a.always_online else
                  "Постоянный «в сети» выключен: аккаунт в сети только пока отвечаешь, потом через 30 с выходит.")
+
+
+@router.message(Command("saved"), owner_only())
+async def cmd_saved(msg: Message, bot: Bot):
+    a = acc()
+    if a.client is None or a.me is None or getattr(a, "paused", False):
+        await answer(msg, "Аккаунт не подключён или зеркало на паузе (/on).")
+        return
+    if CTX.get("saved_job") and not CTX["saved_job"].done():
+        await answer(msg, "Уже выгружаю кружки из «Избранного», дождись конца.")
+        return
+    CTX["saved_job"] = asyncio.ensure_future(export_saved_notes(bot, msg.chat.id))
+    await answer(msg, "Начал выгружать все кружки из «Избранного» за всё время, от старых к новым. Пришлю итог.")
+
+
+async def export_saved_notes(bot: Bot, uid):
+    from telethon.tl.types import InputMessagesFilterRoundVideo
+    a = acc()
+    sent = failed = 0
+    try:
+        notes = [m async for m in a.client.iter_messages("me", reverse=True, filter=InputMessagesFilterRoundVideo)]
+        await bot.send_message(uid, f"В «Избранном» кружков: <b>{len(notes)}</b>. Выгружаю.")
+        for m in notes:
+            folder = config.DATA / "tmp" / uuid.uuid4().hex
+            try:
+                path = await a.download(m, folder)
+                if not path:
+                    raise RuntimeError("не скачался")
+                dur = int(m.file.duration or 0) if m.file and m.file.duration else None
+                when = m.date.astimezone().strftime("%d.%m.%Y %H:%M")
+                await bot.send_message(uid, f"<i>кружок из «Избранного», {when}</i>")
+                await bot.send_video_note(uid, FSInputFile(path), duration=dur, length=(m.file.width if m.file else None) or 384)
+                sent += 1
+            except Exception as e:
+                failed += 1
+                log.warning("кружок %s из избранного не выгрузил: %s", m.id, e)
+                try:
+                    await bot.send_message(uid, f"<i>кружок {m.date.strftime('%d.%m.%Y')} не выгрузился: {html.escape(str(e)[:100])}</i>")
+                except Exception:
+                    pass
+            finally:
+                shutil.rmtree(folder, ignore_errors=True)
+            await asyncio.sleep(1.2)
+            if (sent + failed) % 20 == 0:
+                await bot.send_message(uid, f"…выгружено {sent + failed} из {len(notes)}")
+        await bot.send_message(uid, f"Готово: выгружено кружков <b>{sent}</b> из {len(notes)}" + (f", не вышло {failed}." if failed else "."))
+    except Exception as e:
+        log.exception("выгрузка избранного")
+        await bot.send_message(uid, f"Выгрузка прервалась: {html.escape(str(e)[:200])}. Выгружено {sent}.")
 
 
 @router.message(Command("net"), owner_only())

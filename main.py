@@ -23,6 +23,7 @@ async def setup_menu(bot: Bot):
         BotCommand(command="stop", description="Перестать писать выбранному"),
         BotCommand(command="read", description="Отметить прочитанным выбранный чат"),
         BotCommand(command="online", description="«В сети» постоянно: вкл/выкл"),
+        BotCommand(command="saved", description="Все кружки из «Избранного» сюда"),
         BotCommand(command="net", description="Не трогать «в сети»: вкл/выкл"),
         BotCommand(command="off", description="Выключить зеркало (вход сохраняется)"),
         BotCommand(command="on", description="Включить зеркало"),
